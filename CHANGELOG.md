@@ -6,3 +6,4 @@
 
 ## Release 120
 - Title banner: the opening now reads Remastered Edition, Release 120, credits Marc Blank, Dave Lebling, Bruce Daniels and Tim Anderson, and notes the live AI remaster (tests/banner.txt).
+- Modern shortcuts: X now means EXAMINE; Z (WAIT) and G (AGAIN) already worked in Release 119 and are now covered by tests, with all original verbs unchanged (tests/shortcuts.txt).

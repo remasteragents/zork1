@@ -1,0 +1,47 @@
+# Modern shortcuts: X for EXAMINE, Z for WAIT, G for AGAIN.
+# Each shortcut is checked in play next to the original verb it stands for.
+
+? ZORK I
+?room West of House
+
+# The original verbs still work.
+examine mailbox
+? mailbox is closed
+look at mailbox
+? mailbox is closed
+describe mailbox
+? mailbox is closed
+wait
+? time passes
+
+# X is EXAMINE.
+x mailbox
+? mailbox is closed
+?! don't know the word
+x house
+? house
+?! don't know the word
+
+# G repeats the last command, just like AGAIN.
+x mailbox
+? mailbox is closed
+g
+? mailbox is closed
+again
+? mailbox is closed
+
+# Z is WAIT, and G repeats it.
+z
+? time passes
+g
+? time passes
+?room West of House
+
+# X works on things you carry too.
+open mailbox
+take leaflet
+? taken
+x leaflet
+? welcome to zork
+g
+? welcome to zork
