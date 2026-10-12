@@ -98,6 +98,7 @@ game position, or end this session of the game?|
 <ROUTINE V-VERSION ("AUX" (CNT 17))
 	%<COND (<==? ,ZORK-NUMBER 1>
 		'<TELL "ZORK I: The Great Underground Empire|
+Remastered Edition|
 Infocom interactive fiction - a fantasy story|
 Copyright (c) 1981, 1982, 1983, 1984, 1985, 1986">)
 	       (<==? ,ZORK-NUMBER 2>
@@ -109,7 +110,9 @@ Copyright (c) 1981, 1982, 1983, 1986">)
 Infocom interactive fiction - a fantasy story|
 Copyright 1982, 1983, 1984, 1986">)>
 	<TELL " Infocom, Inc. All rights reserved." CR>
-	<TELL "ZORK is a registered trademark of Infocom, Inc.|
+	<TELL "ZORK is a registered trademark of Infocom, Inc.|">
+	<TELL "Original game by Marc Blank, Dave Lebling, Bruce Daniels and Tim Anderson.|
+This edition is remastered live by AI agents.|
 Release ">
 	<PRINTN <BAND <GET 0 1> *3777*>>
 	<TELL " / Serial number ">

@@ -1,0 +1,14 @@
+# Banner: the opening names the Remastered edition, release 120,
+# credits the original authors and keeps the original copyright line.
+
+? ZORK I: The Great Underground Empire
+? Remastered Edition
+? Copyright \(c\) 1981, 1982, 1983, 1984, 1985, 1986 Infocom, Inc\. All rights reserved\.
+? Marc Blank, Dave Lebling, Bruce Daniels and Tim Anderson
+? remastered live by AI agents
+? Release 120 /
+?room West of House
+version
+? Remastered Edition
+? Release 120 /
+? Tim Anderson
