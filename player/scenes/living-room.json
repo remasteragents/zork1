@@ -1,0 +1,21 @@
+{
+  "room": "Living Room",
+  "kind": "indoor",
+  "size": [7, 3, 8],
+  "walls": "plaster",
+  "floor": "planks",
+  "ceiling": "wood",
+  "ambient": 0.85,
+  "exits": {
+    "east": { "type": "passage", "label": "the doorway east, to the kitchen" },
+    "west": { "type": "door", "closed": true, "label": "a wooden door with strange gothic lettering, nailed shut", "cmd": "open wooden door" },
+    "down": { "type": "none" }
+  },
+  "props": [
+    { "type": "trophy-case", "at": [0, 0, -3.65], "label": "the trophy case", "cmd": "examine trophy case" },
+    { "type": "sword", "wall": "north", "at": [0, 2.25], "label": "an elvish sword of great antiquity", "cmd": "take sword" },
+    { "type": "lantern", "at": [0.45, 0.7, -3.6], "label": "a battery-powered brass lantern", "cmd": "take lantern" },
+    { "type": "rug", "at": [0, 0, 0.2], "label": "a large oriental rug", "cmd": "move rug" },
+    { "type": "chair", "at": [-2.4, 0, -1.2], "rot": 40 }
+  ]
+}

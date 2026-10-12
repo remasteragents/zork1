@@ -13,4 +13,15 @@ zapf zork1.zap > zapf.log 2>&1 || { cat zapf.log; echo "x build failed: zapf"; e
 cd ..
 cp build/zork1.z3 dist/zork1.z3
 cp -R player/. dist/
-echo "build ok: dist/zork1.z3 is $(wc -c < dist/zork1.z3 | tr -d ' ') bytes, $(grep -c warning build/zilf.log || true) compiler warnings"
+# the list of remastered rooms, and every room of the game, for the room view and the site
+node --input-type=module -e "
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { ZMachine } from './player/zm.js';
+import { rooms } from './player/world.js';
+const scenes = readdirSync('player/scenes').filter((f) => f.endsWith('.json') && f !== 'index.json').map((f) => f.slice(0, -5));
+writeFileSync('dist/scenes/index.json', JSON.stringify(scenes));
+const all = rooms(new ZMachine(readFileSync('dist/zork1.z3'), { seed: 1 })).map((r) => ({ id: r.id, name: r.name, slug: r.slug }));
+writeFileSync('dist/rooms.json', JSON.stringify(all));
+"
+
+echo "build ok: dist/zork1.z3 is $(wc -c < dist/zork1.z3 | tr -d ' ') bytes, $(grep -c warning build/zilf.log || true) compiler warnings, $(ls player/scenes/*.json | wc -l | tr -d ' ') room scenes"

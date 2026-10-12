@@ -1,0 +1,22 @@
+{
+  "room": "Cellar",
+  "kind": "indoor",
+  "size": [6.5, 3.1, 8.5],
+  "walls": "stone",
+  "floor": "flagstone",
+  "ceiling": "rock",
+  "ambient": 0.06,
+  "lantern": true,
+  "exits": {
+    "north": { "type": "passage", "label": "a narrow passageway leading north" },
+    "south": { "type": "crawl", "label": "a crawlway to the south" },
+    "west": { "type": "ramp", "label": "the bottom of a steep metal ramp, unclimbable", "cmd": "west" },
+    "up": { "type": "trapdoor", "at": [1.6, -1.5], "label": "the trap door, up to the living room" }
+  },
+  "props": [
+    { "type": "puddle", "at": [1.4, 0, 0.6] },
+    { "type": "puddle", "at": [-1.6, 0, -2.4], "scale": 0.6 },
+    { "type": "barrel", "at": [2.5, 0, -3.3] },
+    { "type": "bones", "at": [-2.2, 0, 1.8] }
+  ]
+}
