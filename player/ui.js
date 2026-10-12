@@ -117,7 +117,7 @@ async function startView(bytes, onCommand) {
   const { createScene } = await import('./scene.js');
   const mapVm = new ZMachine(bytes, { seed: 1 });
   rooms = listRooms(mapVm);
-  view = createScene($('view'), { onCommand, rooms, remastered: remastered ?? new Set() });
+  view = await createScene($('view'), { onCommand, rooms, remastered: remastered ?? new Set() });
 }
 
 // ---- the terminal ----------------------------------------------------------------

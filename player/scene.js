@@ -7,9 +7,12 @@
 import * as THREE from './vendor/three.min.js';
 import { EXITS, MATERIALS, PROPS } from './scene-kit.js';
 
-const LIME = 0xd4ff3a;
-const DEEP = 0x120838;
-const PIXEL = 2.5; // one scene pixel is this many CSS pixels: the chunky look
+// the site's neon green and black: the wireframe, its grid and the exit markers outdoors
+const NEON = 0x00ff00;
+const NEON_OFF = 0x006100;
+const NEON_DIM = 0x1f3a1f;
+const BLACK = 0x1a1a1a;
+const PIXEL = 1; // render the environment at native resolution
 
 // ---- procedural pixel textures -------------------------------------------------
 
@@ -39,9 +42,9 @@ function texture(size, draw) {
   draw(set, size);
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
-  t.generateMipmaps = false;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
+  t.generateMipmaps = true;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
@@ -145,10 +148,10 @@ function tex(name) {
     wood: () => planks([104, 70, 42], 16, true, 12),
     siding: () => siding(),
     plaster: () => noise([196, 186, 168], 16, 17, { count: 90, colors: [[176, 166, 150]] }),
-    grass: () => noise([74, 116, 52], 26, 18, { count: 380, colors: [[52, 92, 38], [96, 140, 64], [118, 150, 70]], tall: true }),
-    dirt: () => noise([118, 90, 62], 30, 19, { count: 160, colors: [[90, 70, 50], [150, 128, 96]] }),
+    grass: () => noise([62, 76, 48], 12, 18, { count: 380, colors: [[52, 92, 38], [96, 140, 64], [118, 150, 70]], tall: true }),
+    dirt: () => noise([109, 101, 82], 16, 19, { count: 160, colors: [[90, 70, 50], [150, 128, 96]] }),
     sand: () => noise([196, 174, 128], 22, 20, { count: 120, colors: [[170, 150, 108]] }),
-    leaves: () => noise([46, 92, 40], 46, 21, { count: 420, colors: [[30, 64, 30], [86, 132, 58]] }),
+    leaves: () => noise([42, 67, 49], 12, 21, { count: 420, colors: [[30, 64, 30], [86, 132, 58]] }),
     bark: () => planks([86, 62, 44], 22, true, 5),
     metal: () => noise([120, 124, 130], 18, 23, { count: 60, colors: [[80, 84, 90], [170, 174, 180]] }),
     water: () => noise([40, 82, 128], 30, 24, { count: 140, colors: [[90, 140, 190], [28, 60, 100]] }),
@@ -159,6 +162,38 @@ function tex(name) {
   return (TEXTURES[name] = t());
 }
 
+const PBR = {};
+let materialsReady;
+function loadMaterials() {
+  return materialsReady ??= fetch('materials.json').then(r => r.ok ? r.json() : {}).then(async (all) => {
+    const loader = new THREE.TextureLoader();
+    await Promise.all(Object.entries(all).map(async ([name, maps]) => {
+      const loaded = await Promise.all(Object.entries(maps).map(async ([key, uri]) => {
+        const map = await loader.loadAsync(uri);
+        map.wrapS = map.wrapT = THREE.RepeatWrapping;
+        map.anisotropy = 4;
+        if (key === 'map') {
+          map.colorSpace = THREE.SRGBColorSpace;
+          if (name === 'siding') {
+            const c = document.createElement('canvas'); c.width = map.image.width; c.height = map.image.height;
+            const g = c.getContext('2d'); g.drawImage(map.image, 0, 0);
+            const image = g.getImageData(0, 0, c.width, c.height);
+            for (let i = 0; i < image.data.length; i += 4) {
+              const l = image.data[i] * 0.3 + image.data[i+1] * 0.59 + image.data[i+2] * 0.11;
+              const v = 175 + l * 0.28;
+              image.data[i] = v; image.data[i+1] = v - 3; image.data[i+2] = v - 13;
+            }
+            g.putImageData(image, 0, 0); map.image = c; map.needsUpdate = true;
+          }
+        }
+        return [key, map];
+      }));
+      PBR[name] = Object.fromEntries(loaded);
+      TEXTURES[name] = PBR[name].map;
+    }));
+  }).catch(() => {});
+}
+
 const MATS = {};
 function mat(name, repeat = 1) {
   const key = `${name}:${repeat}`;
@@ -166,9 +201,69 @@ function mat(name, repeat = 1) {
   const map = tex(name).clone();
   map.needsUpdate = true;
   map.repeat.set(repeat, repeat);
-  return (MATS[key] = new THREE.MeshLambertMaterial({ map, side: THREE.FrontSide }));
+  const normalMap = PBR[name]?.normalMap.clone();
+  if (normalMap) { normalMap.repeat.set(repeat, repeat); normalMap.needsUpdate = true; }
+  return (MATS[key] = new THREE.MeshStandardMaterial({ map, normalMap, bumpMap: normalMap ? null : map, bumpScale: name === 'grass' ? 0.025 : 0.055, roughness: name === 'metal' ? 0.45 : 0.93, metalness: name === 'metal' ? 0.55 : 0, side: THREE.FrontSide }));
 }
-const flat = (color, extra = {}) => new THREE.MeshLambertMaterial({ color, ...extra });
+const flat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.82, ...extra });
+
+let pineMat;
+function pineMaterial() {
+  if (pineMat) return pineMat;
+  const canvas = document.createElement('canvas'); canvas.width = 256; canvas.height = 256;
+  const g = canvas.getContext('2d'); const r = rng(1492);
+  for (let twig = 0; twig < 65; twig++) {
+    const start = 40 + r() * 190;
+    const side = twig % 2 ? 1 : -1;
+    const reach = (250 - start) * 0.46 + 12;
+    const endX = 128 + side * reach, endY = start - 30 - r() * 16;
+    g.strokeStyle = '#3b4630'; g.lineWidth = 1.2;
+    g.beginPath(); g.moveTo(128, start); g.lineTo(endX, endY); g.stroke();
+    for (let i = 0; i < 45; i++) {
+      const t = i / 45; const x = 128 + (endX - 128) * t, y = start + (endY - start) * t;
+      g.strokeStyle = ['#243c2b','#526742','#6d7b4b','#41563b'][Math.floor(r()*4)];
+      g.lineWidth = 0.8 + r() * 0.7;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + side * (3+r()*9), y - 4-r()*9); g.stroke();
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x - side * (2+r()*5), y - 7-r()*9); g.stroke();
+    }
+  }
+  const map = new THREE.CanvasTexture(canvas); map.colorSpace = THREE.SRGBColorSpace;
+  return pineMat = new THREE.MeshStandardMaterial({ map, side: THREE.DoubleSide, alphaTest: 0.3, roughness: 0.95 });
+}
+
+function landscape(scene, spec) {
+  const r = rng(1980);
+  const groundColor = flat(0xa0ab6e, { side: THREE.DoubleSide, roughness: 1, vertexColors: true });
+  const blade = new THREE.BufferGeometry();
+  blade.setAttribute('position', new THREE.Float32BufferAttribute([-0.025,0,0, 0.025,0,0, 0.012,0.22,0.01, -0.025,0,0, 0.012,0.22,0.01, 0.07,0.42,0.025], 3));
+  blade.computeVertexNormals();
+  blade.setAttribute('color', new THREE.Float32BufferAttribute([0.28,0.33,0.22, 0.28,0.33,0.22, 0.65,0.73,0.44, 0.28,0.33,0.22, 0.65,0.73,0.44, 0.8,0.8,0.56], 3));
+  const grass = new THREE.InstancedMesh(blade, groundColor, 5000);
+  const dummy = new THREE.Object3D();
+  let count = 0;
+  for (let i = 0; i < 7000 && count < 5000; i++) {
+    const x = (r() - 0.5) * 52, z = (r() - 0.5) * 52;
+    if (Math.abs(z - (spec.path?.z ?? 0)) < 1.7 && x > -10 && x < 12) continue;
+    if (x > 2.9 && x < 10 && Math.abs(z) < 5.0) continue;
+    dummy.position.set(x, 0.015, z);
+    dummy.rotation.y = r() * Math.PI * 2;
+    dummy.scale.setScalar(0.4 + r() * 1.1);
+    dummy.updateMatrix(); grass.setMatrixAt(count++, dummy.matrix);
+  }
+  grass.count = count; grass.receiveShadow = true; scene.add(grass);
+  for (let i = 0; i < 34; i++) {
+    const angle = i / 34 * Math.PI * 2 + r() * 0.13;
+    const radius = 19 + r() * 14;
+    const at = [Math.sin(angle) * radius, 0, Math.cos(angle) * radius];
+    const tree = PROP.tree({}, { at, scale: 0.7 + r() * 0.9 });
+    tree.position.set(...at); scene.add(tree);
+  }
+  for (let i = 0; i < 18; i++) {
+    const angle = r() * Math.PI * 2, radius = 11 + r() * 11;
+    const rock = PROP.boulder(); rock.scale.setScalar(0.5 + r() * 1.4);
+    rock.position.set(Math.sin(angle) * radius, 0, Math.cos(angle) * radius); scene.add(rock);
+  }
+}
 
 // ---- geometry helpers -------------------------------------------------------------
 
@@ -245,8 +340,8 @@ function flameTexture() {
     }),
   );
   const t = new THREE.CanvasTexture(c);
-  t.magFilter = THREE.NearestFilter;
-  t.minFilter = THREE.NearestFilter;
+  t.magFilter = THREE.LinearFilter;
+  t.minFilter = THREE.LinearMipmapLinearFilter;
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
@@ -353,20 +448,26 @@ const PROP = {
   },
   tree(ctx, p) {
     const g = new THREE.Group();
-    const h = 2.6 * (p.scale ?? 1);
-    g.add(cyl(0.16, 0.24, h, mat('bark'), 7));
-    const leaf = mat('leaves', 1);
-    for (let i = 0; i < 4; i++) {
-      const s = 1.6 - i * 0.3;
-      const c = new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), leaf);
-      c.position.set((i % 2 ? 0.3 : -0.25) * (i ? 1 : 0), h + i * 0.55 - 0.2, (i % 3 ? 0.2 : -0.2) * (i ? 1 : 0));
-      g.add(c);
+    const scale = p.scale ?? 1;
+    g.add(cyl(0.12 * scale, 0.28 * scale, 8.5 * scale, mat('bark', 3), 12));
+    const r = rng(Math.abs(Math.round((p.at?.[0] ?? 1) * 127 + (p.at?.[2] ?? 2) * 239)));
+    const foliage = new THREE.InstancedMesh(new THREE.PlaneGeometry(2.8, 2.2), pineMaterial(), 84);
+    const branch = new THREE.Object3D();
+    let n = 0;
+    for (let tier = 0; tier < 7; tier++) for (let side = 0; side < 12; side++) {
+      const angle = side / 12 * Math.PI * 2 + tier * 0.73;
+      const radius = (1.4 - tier * 0.15) * scale;
+      branch.position.set(Math.sin(angle) * radius, (3.1 + tier * 0.77) * scale, Math.cos(angle) * radius);
+      branch.rotation.set(-0.3 + r() * 0.25, angle, (r() - 0.5) * 0.3);
+      branch.scale.setScalar((1.1 - tier * 0.11) * scale);
+      branch.updateMatrix(); foliage.setMatrixAt(n++, branch.matrix);
     }
+    g.add(foliage);
     return g;
   },
   bush() {
     const g = new THREE.Group();
-    const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 0), mat('leaves'));
+    const c = new THREE.Mesh(new THREE.IcosahedronGeometry(0.6, 2), mat('leaves'));
     c.position.y = 0.4;
     c.scale.y = 0.7;
     g.add(c);
@@ -374,7 +475,7 @@ const PROP = {
   },
   boulder() {
     const g = new THREE.Group();
-    const m = new THREE.Mesh(new THREE.DodecahedronGeometry(0.7, 0), mat('rock'));
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 2), mat('rock'));
     m.position.y = 0.45;
     m.scale.set(1.2, 0.8, 1);
     g.add(m);
@@ -385,19 +486,35 @@ const PROP = {
     const g = new THREE.Group();
     const w = p.width ?? 9;
     const h = 3.6;
-    // big clapboards: thin stripes shimmer at the chunky resolution
-    g.add(box(w, h, 6, mat('siding'), 0, 0, 0, 3.2));
-    const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 4.6, 2.4, 4, 1), flat(0x3a2f3a));
-    roof.rotation.y = Math.PI / 4;
-    roof.scale.set(w / 6.2, 1, 1.05);
-    roof.position.y = h + 1.15;
-    g.add(roof);
+    const paint = mat('siding', 3.2);
+    g.add(box(w + 0.2, 0.45, 6.2, mat('stone', 4), 0, 0, 0));
+    g.add(box(w, h - 0.35, 6, paint, 0, 0.35, 0));
+    // A pitched roof with proper gables, eaves and weathered timber trim.
+    const rise = 2.0;
+    const slope = Math.atan2(rise, w / 2 + 0.35);
+    const roofMat = mat('stone', 5).clone();
+    roofMat.color.set(0x989b90);
+    for (const side of [-1, 1]) {
+      const roof = box(Math.hypot(w / 2 + 0.35, rise), 0.16, 6.75, roofMat, side * (w / 4 + 0.17), h + rise / 2, 0);
+      roof.rotation.z = -side * slope;
+      g.add(roof);
+      const shape = new THREE.Shape();
+      shape.moveTo(-w / 2, h); shape.lineTo(w / 2, h); shape.lineTo(0, h + rise); shape.closePath();
+      const gable = new THREE.Mesh(new THREE.ShapeGeometry(shape), flat(0xb9b6a7, { side: THREE.DoubleSide }));
+      gable.position.z = side * 3.01;
+      g.add(gable);
+    }
+    for (const x of [-w / 2, w / 2]) for (const z of [-3.02, 3.02]) g.add(box(0.13, h, 0.13, flat(0xd8d2bb), x, 0, z));
+    for (const z of [-3.07, 3.07]) g.add(box(w + 0.3, 0.16, 0.18, flat(0xa5a18f), 0, h - 0.1, z));
+    g.add(box(1.15, 2.2, 1.05, mat('stone', 2), -w * 0.29, h + 0.5, -1.4));
+    g.add(box(1.3, 0.16, 1.2, flat(0x656c65), -w * 0.29, h + 2.6, -1.4));
     const board = mat('planks');
     // "door": false draws a side of the house with no door, only boarded windows
     const hasDoor = p.door !== false;
     if (hasDoor) {
       const door = box(1.1, 2.1, 0.08, mat('wood'), 0, 0, 3.02);
-      g.add(door);
+      g.add(door, box(1.5, 0.22, 0.7, mat('stone'), 0, 0, 3.3));
+      g.add(box(0.12, 2.3, 0.16, flat(0xd6d0b9), -0.61, 0, 3.08), box(0.12, 2.3, 0.16, flat(0xd6d0b9), 0.61, 0, 3.08), box(1.35, 0.12, 0.16, flat(0xd6d0b9), 0, 2.2, 3.08));
       for (const [y, r] of [[0.8, 0.5], [1.5, -0.45]]) {
         const b = box(1.5, 0.18, 0.05, board, 0, y, 3.08);
         b.rotation.z = r;
@@ -409,6 +526,8 @@ const PROP = {
     for (const x of p.windows === false ? [] : hasDoor ? [-w / 3, w / 3] : [-w / 3, 0, w / 3]) {
       const pane = box(1.0, 1.1, 0.06, flat(0x1d1a24), x, 1.3, 3.02);
       g.add(pane);
+      for (const side of [-1, 1]) g.add(box(0.09, 1.28, 0.12, flat(0xb9b59f), x + side * 0.55, 1.23, 3.08));
+      g.add(box(1.22, 0.1, 0.2, flat(0xb9b59f), x, 1.23, 3.1), box(1.22, 0.1, 0.14, flat(0xb9b59f), x, 2.46, 3.08));
       for (const y of [1.45, 1.75]) g.add(box(1.2, 0.14, 0.05, board, x, y, 3.07));
       if (!hasDoor) ctx.clickable(pane, p.label ?? 'a boarded window', p.cmd ?? 'open window');
     }
@@ -428,7 +547,7 @@ const PROP = {
   },
   pillar() {
     const g = new THREE.Group();
-    g.add(cyl(0.3, 0.34, 3.2, mat('marble'), 10), box(0.8, 0.2, 0.8, mat('marble')));
+    g.add(cyl(0.22, 0.3, 2.75, mat('stone', 2), 16), box(0.65, 0.18, 0.65, mat('stone')), box(0.7, 0.18, 0.7, mat('stone'), 0, 2.72, 0));
     return g;
   },
   stalagmite() {
@@ -562,8 +681,9 @@ const goLabel = (dir, to) => `Go ${DIR_WORD[dir] ?? dir}${to ? ` to ${to}` : ''}
 
 // ---- the scene -----------------------------------------------------------------------
 
-export function createScene(root, { onCommand = () => {}, rooms = [], remastered = new Set() } = {}) {
+export async function createScene(root, { onCommand = () => {}, rooms = [], remastered = new Set() } = {}) {
   root.classList.add('sc');
+  await loadMaterials();
   root.innerHTML = `
     <div class="sc-bar">
       <span class="sc-view">VIEW: PERSPECTIVE</span>
@@ -606,17 +726,21 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
     }, { threshold: 0.5 });
     seen.observe(stage);
   } else setTimeout(hideHint, 6000);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
-  renderer.setPixelRatio(1);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
-  const camera = new THREE.PerspectiveCamera(64, 16 / 9, 0.05, 200);
+  const camera = new THREE.PerspectiveCamera(52, 16 / 9, 0.05, 200);
   let solid = new THREE.Scene();
   let wire = new THREE.Scene();
   let ctx = null;
   let room = null;
   let lighting = true;
-  let wireMode = 'partial';
+  let wireMode = 'off';
   let split = 0.72;
   let yaw = 0;
   let pitch = -0.06;
@@ -676,17 +800,22 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
       sky.height = 64;
       const sg = sky.getContext('2d');
       const grad = sg.createLinearGradient(0, 0, 0, 64);
-      grad.addColorStop(0, S.sky ?? '#6f8fd8');
-      grad.addColorStop(1, '#d9e4f2');
+      grad.addColorStop(0, S.sky ?? '#698283');
+      grad.addColorStop(1, '#d4d1b4');
       sg.fillStyle = grad;
       sg.fillRect(0, 0, 2, 64);
       const st = new THREE.CanvasTexture(sky);
       st.colorSpace = THREE.SRGBColorSpace;
       solid.background = st;
-      solid.fog = new THREE.Fog(0xc8d6ea, 18, 46);
-      solid.add(new THREE.HemisphereLight(0xdbe8ff, 0x4a6a30, ambient * 2.2));
-      const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
-      sun.position.set(-6, 10, 4);
+      solid.fog = new THREE.Fog(0x9ba997, 18, 65);
+      solid.add(new THREE.HemisphereLight(0xb7cbd0, 0x393c28, ambient * 1.0));
+      const sun = new THREE.DirectionalLight(0xffddb0, 3.4);
+      sun.position.set(-14, 19, -7);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(innerWidth > 768 ? 2048 : 1024, innerWidth > 768 ? 2048 : 1024);
+      Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 80 });
+      sun.shadow.bias = -0.0004;
+      sun.shadow.normalBias = 0.04;
       solid.add(sun);
     } else {
       solid.background = new THREE.Color(0x07060a);
@@ -712,7 +841,9 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
     if (outdoor) {
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), mat(S.floor ?? 'grass', 30));
       ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
       solid.add(ground);
+      landscape(solid, S);
       if (S.path) {
         const path = new THREE.Mesh(new THREE.PlaneGeometry(S.path.width ?? 2.2, S.path.length ?? 40), mat('dirt', 8));
         path.rotation.x = -Math.PI / 2;
@@ -726,7 +857,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
         const v = { north: [0, -1], south: [0, 1], east: [1, 0], west: [-1, 0], ne: [0.7, -0.7], nw: [-0.7, -0.7], se: [0.7, 0.7], sw: [-0.7, 0.7] }[dir];
         if (!v) continue;
         const r = W * 0.42;
-        const marker = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.8, 4), new THREE.MeshBasicMaterial({ color: LIME }));
+        const marker = new THREE.Mesh(new THREE.ConeGeometry(0.10, 0.22, 16), new THREE.MeshBasicMaterial({ color: 0xd3ba80, transparent: true, opacity: 0.7 }));
         marker.rotation.x = Math.PI;
         marker.position.set(v[0] * r, 0.9, v[1] * r);
         ctx.flickers.push({ bob: marker, phase: Math.random() * 6 });
@@ -899,11 +1030,14 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
       solid.add(g);
     }
 
-    // the wireframe twin: every mesh's edges in lime on deep violet
-    wire.background = new THREE.Color(DEEP);
+    solid.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = !o.isInstancedMesh && o.geometry.type !== 'PlaneGeometry'; } });
+
+    // the wireframe twin: every mesh's edges in neon green on black
+    wire.background = new THREE.Color(BLACK);
     solid.updateMatrixWorld(true);
-    const lineMat = new THREE.LineBasicMaterial({ color: LIME, transparent: true, opacity: built ? 0.85 : 0.9 });
+    const lineMat = new THREE.LineBasicMaterial({ color: NEON, transparent: true, opacity: built ? 0.85 : 0.9 });
     solid.traverse((o) => {
+      if (o.isInstancedMesh) return;
       if (!o.isMesh || !o.material || o.material.visible === false) return;
       if (o.geometry.type === 'PlaneGeometry' && o.material.isMeshBasicMaterial) return;
       const lines = new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry, 25), lineMat);
@@ -911,7 +1045,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
       lines.matrix.copy(o.matrixWorld);
       wire.add(lines);
     });
-    const grid = new THREE.GridHelper(outdoor ? 40 : Math.max(W, D) * 2, outdoor ? 40 : Math.round(Math.max(W, D) * 2), 0x6a3cff, 0x3a2a8a);
+    const grid = new THREE.GridHelper(outdoor ? 40 : Math.max(W, D) * 2, outdoor ? 40 : Math.round(Math.max(W, D) * 2), NEON_OFF, NEON_DIM);
     grid.position.y = 0.005;
     wire.add(grid);
 
@@ -1066,7 +1200,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
       }
       if (f.bob) f.bob.position.y = 0.9 + Math.sin(t * 2.2 + f.phase) * 0.12;
     }
-    if (ctx.lantern) ctx.lantern.intensity = lighting ? 7 : 0;
+    if (ctx.lantern) ctx.lantern.intensity = lighting ? 25 : 0;
     solid.traverse((o) => {
       if ((o.isAmbientLight || o.isHemisphereLight) && o.userData.base === undefined) o.userData.base = o.intensity;
       if (o.isAmbientLight || o.isHemisphereLight) o.intensity = lighting ? o.userData.base : 3;
