@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Zork I</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="status" aria-live="polite">
+      <span id="room"></span>
+      <span id="score"></span>
+    </div>
+    <main id="screen" tabindex="-1">
+      <div id="log" role="log" aria-live="polite"></div>
+      <form id="prompt" autocomplete="off">
+        <label for="cmd">&gt;</label>
+        <input id="cmd" name="cmd" type="text" spellcheck="false" autocapitalize="off" autocorrect="off" enterkeyhint="send" />
+      </form>
+    </main>
+    <script type="module" src="ui.js"></script>
+  </body>
+</html>

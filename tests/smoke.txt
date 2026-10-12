@@ -1,0 +1,42 @@
+# Smoke run: the opening of Zork I, from the mailbox to the cellar.
+# Every build has to pass it before it ships.
+
+? ZORK I
+?room West of House
+open mailbox
+? leaflet
+read leaflet
+? welcome to zork
+north
+?room North of House
+north
+?room Forest Path
+up
+? egg
+take egg
+? taken
+?score >= 5
+down
+south
+east
+?room Behind House
+open window
+? open the window
+west
+?room Kitchen
+?score >= 15
+west
+?room Living Room
+take lamp
+take sword
+move rug
+? trap door
+open trap door
+turn on lamp
+? lantern is now on
+down
+?room Cellar
+?score >= 40
+inventory
+? egg
+? lantern
