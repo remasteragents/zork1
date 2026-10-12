@@ -27,13 +27,15 @@ function exitsOf(vm, obj) {
   return out;
 }
 
-/** Every room: an object with at least one direction property. */
+/** Every room: a named object with at least one direction property (the nameless LOCAL-GLOBALS only looks like one). */
 export function rooms(vm) {
   const count = Math.min(255, (vm.rw(vm.objAddr(1) + 7) - vm.objAddr(1)) / 9);
   const list = [];
   for (let o = 1; o <= count; o++) {
+    const name = vm.objName(o);
+    if (!name) continue;
     const exits = exitsOf(vm, o);
-    if (Object.keys(exits).length) list.push({ id: o, name: vm.objName(o), slug: slug(vm.objName(o)), exits });
+    if (Object.keys(exits).length) list.push({ id: o, name, slug: slug(name), exits });
   }
   return list;
 }

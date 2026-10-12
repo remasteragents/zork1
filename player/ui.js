@@ -1,9 +1,18 @@
 // The browser player: a terminal around the Z-machine, with the room drawn in 3D above it.
-//   index.html               the full player: room view on top, terminal below
-//   index.html?layout=text   only the terminal (tells a room view in another frame where you are)
-//   index.html?layout=scene  only the room view (follows a terminal in another frame)
+//   index.html                           the full player: room view on top, terminal below
+//   index.html?layout=text               only the terminal
+//   index.html?layout=scene              only the room view, showing the start room
+//   index.html?layout=scene&room=cellar  only the room view of one place, drawn from the map (no game running)
+//   ...&pair=<id>                        a text frame and a scene frame with the same pair follow each other over
+//                                        a BroadcastChannel; without pair a frame uses no channel at all
+//
+// The page around a frame (same origin) drives and follows it with postMessage:
+//   frame to page  { type: 'remaster:status', status, slug }               after every turn
+//   frame to page  { type: 'remaster:room', id, name, slug, remastered }   on boot and after every turn
+//   page to frame  { type: 'remaster:cmd', text }    terminal layouts: run a command as if typed
+//   page to frame  { type: 'remaster:show', slug }   scene layout: show that place
 import { ZMachine } from './zm.js';
-import { here, rooms as listRooms } from './world.js';
+import { here, rooms as listRooms, slug as slugOf } from './world.js';
 
 const $ = (id) => document.getElementById(id);
 const log = $('log');
@@ -16,13 +25,28 @@ document.body.classList.add(`layout-${layout}`);
 const base = location.pathname.replace(/[^/]*$/, '');
 // one save slot per copy of the game, so the 1980 original and the remaster never overwrite each other
 const SLOT = `remaster:save:${base}`;
-// the terminal and the room view of the same build talk over this channel when they live in separate frames
-const channel = 'BroadcastChannel' in window ? new BroadcastChannel(`remaster:${base}`) : null;
+// a terminal frame and a room view frame of the same build talk over this channel, only when the page pairs them
+const pair = params.get('pair');
+const channel = pair && 'BroadcastChannel' in window ? new BroadcastChannel(`remaster:${base}:${pair}`) : null;
 const history = [];
 let back = 0;
 let vm;
 // inside a frame on someone's page, never grab the keyboard before the player clicks in
 const embedded = window.parent !== window;
+const toParent = (msg) => embedded && window.parent.postMessage(msg, '/');
+// slugs of the places that have a scene file (scenes/index.json); null while unknown
+let remastered = null;
+
+// keep the prompt in view and start the top line whole, right under the status bar
+function scrollToEnd() {
+  const line = parseFloat(getComputedStyle(log).lineHeight);
+  const need = form.offsetTop + form.offsetHeight - screen.clientHeight;
+  if (!(line > 0) || need <= 0) {
+    screen.scrollTop = Math.max(0, need);
+    return;
+  }
+  screen.scrollTop = log.offsetTop + Math.ceil((need - log.offsetTop) / line) * line;
+}
 
 function write(text, cls) {
   if (!text) return;
@@ -30,7 +54,7 @@ function write(text, cls) {
   if (cls) span.className = cls;
   span.textContent = text;
   log.appendChild(span);
-  screen.scrollTop = screen.scrollHeight;
+  scrollToEnd();
 }
 
 // the game prints its own ">" before every command; the input line shows it instead
@@ -41,7 +65,7 @@ function print(text) {
 function status(st) {
   $('room').textContent = st.room;
   $('score').textContent = 'score' in st ? `Score: ${st.score}   Moves: ${st.moves}` : `Time: ${st.hours}:${String(st.minutes).padStart(2, '0')}`;
-  if (embedded) window.parent.postMessage({ type: 'remaster:status', status: st }, '*');
+  toParent({ type: 'remaster:status', status: st, slug: slugOf(st.room) });
 }
 
 function save(snapshot) {
@@ -68,6 +92,7 @@ let rooms = [];
 const specs = new Map();
 
 async function specFor(slug) {
+  if (remastered && !remastered.has(slug)) return null;
   if (!specs.has(slug)) {
     specs.set(
       slug,
@@ -89,15 +114,10 @@ async function showRoom(info) {
 }
 
 async function startView(bytes, onCommand) {
-  const [{ createScene }, index] = await Promise.all([
-    import('./scene.js'),
-    fetch('scenes/index.json', { cache: 'no-cache' })
-      .then((r) => (r.ok ? r.json() : []))
-      .catch(() => []),
-  ]);
+  const { createScene } = await import('./scene.js');
   const mapVm = new ZMachine(bytes, { seed: 1 });
   rooms = listRooms(mapVm);
-  view = createScene($('view'), { onCommand, rooms, remastered: new Set(index) });
+  view = createScene($('view'), { onCommand, rooms, remastered: remastered ?? new Set() });
 }
 
 // ---- the terminal ----------------------------------------------------------------
@@ -107,6 +127,7 @@ function announce() {
   const info = here(vm);
   if (view) showRoom(info);
   channel?.postMessage({ type: 'room', id: info.id });
+  toParent({ type: 'remaster:room', id: info.id, name: info.name, slug: info.slug, remastered: !!remastered?.has(info.slug) });
 }
 
 function afterTurn(auto = false) {
@@ -115,18 +136,19 @@ function afterTurn(auto = false) {
   if (!(auto && embedded)) cmd.focus({ preventScroll: true });
 }
 
-function send(text) {
+// quiet: a command from the page around the frame, which keeps its own focus
+function send(text, quiet = false) {
   if (vm.halted) {
     log.textContent = '';
     vm.reset();
     vm.run();
-    return afterTurn();
+    return afterTurn(quiet);
   }
   write(`>${text}\n`, 'cmd');
   if (text.trim()) history.push(text);
   back = history.length;
   vm.input(text);
-  afterTurn();
+  afterTurn(quiet);
 }
 
 form.addEventListener('submit', (e) => {
@@ -151,25 +173,64 @@ screen.addEventListener('click', () => {
   if (!window.getSelection()?.toString()) cmd.focus({ preventScroll: true });
 });
 
+// ---- the page around the frame ------------------------------------------------------
+
+// what the page asks for before the game or the view is ready waits here
+const queued = [];
+let ready = false;
+let askedRoom = params.get('room');
+
+function showPlace(slug) {
+  const info = rooms.find((r) => r.slug === slug);
+  if (info) showRoom(info);
+}
+
+window.addEventListener('message', (e) => {
+  if (!embedded || e.source !== window.parent || e.origin !== location.origin) return;
+  const m = e.data;
+  if (layout === 'scene') {
+    if (m?.type !== 'remaster:show' || typeof m.slug !== 'string') return;
+    if (view) showPlace(m.slug);
+    else askedRoom = m.slug;
+  } else if (m?.type === 'remaster:cmd' && typeof m.text === 'string') {
+    if (ready) send(m.text, true);
+    else queued.push(m.text);
+  }
+});
+
 async function boot() {
-  const res = await fetch('zork1.z3', { cache: 'no-cache' });
+  const [res, index] = await Promise.all([
+    fetch('zork1.z3', { cache: 'no-cache' }),
+    fetch('scenes/index.json', { cache: 'no-cache' })
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]);
   if (!res.ok) throw new Error(`Could not load the story file (${res.status})`);
+  if (Array.isArray(index)) remastered = new Set(index);
   const bytes = new Uint8Array(await res.arrayBuffer());
   const seed = params.has('seed') ? Number(params.get('seed')) : undefined;
 
   if (layout === 'scene') {
-    // only the view: follow the terminal of the same build in another frame
+    // only the view: one place from the map, or the terminal of the same pair in another frame
     await startView(bytes, (text) => channel?.postMessage({ type: 'cmd', text }));
-    const start = new ZMachine(bytes, { seed: 1 });
-    start.run();
+    const startRoom = () => {
+      const start = new ZMachine(bytes, { seed: 1 });
+      start.run();
+      return here(start);
+    };
+    if (askedRoom) showRoom(rooms.find((r) => r.slug === askedRoom) ?? startRoom());
+    if (!channel) {
+      if (!askedRoom) showRoom(startRoom());
+      return;
+    }
     let heard = false;
-    channel?.addEventListener('message', (e) => {
+    channel.addEventListener('message', (e) => {
       if (e.data?.type !== 'room') return;
       heard = true;
       showRoom(rooms.find((r) => r.id === e.data.id) ?? null);
     });
-    channel?.postMessage({ type: 'hello' });
-    setTimeout(() => !heard && showRoom(here(start)), 500);
+    channel.postMessage({ type: 'hello' });
+    if (!askedRoom) setTimeout(() => !heard && showRoom(startRoom()), 500);
     return;
   }
 
@@ -187,6 +248,8 @@ async function boot() {
   }
   vm.run();
   afterTurn(true);
+  ready = true;
+  for (const text of queued.splice(0)) send(text, true);
 }
 
 boot().catch((e) => write(`\n[${e.message}]\n`));

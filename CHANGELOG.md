@@ -12,3 +12,6 @@
 - The player draws the current room in 3D above the terminal. Remastered rooms are scenes in player/scenes; the rest of the world shows as a wireframe from the game's map.
 - First scenes: West of House, Living Room, Cellar.
 - North of House scene: the doorless north wall of the white house with its windows boarded up, and a narrow path winding north through the trees. The house prop gained a "door": false option for sides without a door.
+
+## Player
+- Frames talk over a channel only when paired with ?pair=<id>, the page around a frame can follow and drive it with postMessage (remaster:room, remaster:status, remaster:cmd, remaster:show), ?room=<slug> shows one place in the room view, rooms are counted as 78 unique places (ROOM 12 OF 78), the room view labels its REMASTER and MAP halves, and tooltips, the hint, the ruler, the 16px input, log scrolling and touch scrolling are fixed.

@@ -550,6 +550,9 @@ const PROP = {
 const DIR_WALL = { north: 'north', south: 'south', east: 'east', west: 'west', ne: 'north', nw: 'north', se: 'south', sw: 'south', in: 'north', out: 'south', land: 'south' };
 const DIR_SHIFT = { ne: 0.32, nw: -0.32, se: -0.32, sw: 0.32 };
 const DEFAULT_EXIT = { up: 'stairs', down: 'trapdoor', in: 'door', out: 'door' };
+// tooltips speak in full words: "Go southeast to South of House", never "se"
+const DIR_WORD = { ne: 'northeast', nw: 'northwest', se: 'southeast', sw: 'southwest', land: 'ashore' };
+const goLabel = (dir, to) => `Go ${DIR_WORD[dir] ?? dir}${to ? ` to ${to}` : ''}`;
 
 // ---- the scene -----------------------------------------------------------------------
 
@@ -569,14 +572,34 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
       <div class="sc-split" title="Drag to compare the remaster with its wireframe"></div>
       <div class="sc-tip"></div>
       <div class="sc-cap"><b></b><span></span></div>
-      <div class="sc-state"></div>
-      <div class="sc-hint">drag to look around · click a doorway or an object</div>
+      <div class="sc-tag sc-tag-remaster" hidden>REMASTER</div>
+      <div class="sc-tag sc-tag-map" hidden>MAP</div>
+      <div class="sc-tag sc-tag-todo" hidden>NOT REMASTERED YET</div>
+      <div class="sc-hint"></div>
     </div>
     <div class="sc-ruler"></div>`;
   const canvas = root.querySelector('canvas');
   const stage = root.querySelector('.sc-stage');
   const tip = root.querySelector('.sc-tip');
   const splitEl = root.querySelector('.sc-split');
+  const tags = { remaster: root.querySelector('.sc-tag-remaster'), map: root.querySelector('.sc-tag-map'), todo: root.querySelector('.sc-tag-todo') };
+  const ruler = root.querySelector('.sc-ruler');
+  // places, not room objects: the 15 maze rooms are one place with one scene; numbered in game order
+  const places = [...new Set(rooms.map((r) => r.slug))];
+
+  // the hint fades by itself 6 seconds after the view comes into sight, or at the first touch
+  const hint = root.querySelector('.sc-hint');
+  hint.textContent = `drag to look around · ${matchMedia('(pointer: coarse)').matches ? 'tap' : 'click'} a doorway or an object`;
+  const hideHint = () => hint.classList.add('gone');
+  root.addEventListener('pointerdown', hideHint, { capture: true, once: true });
+  if ('IntersectionObserver' in window) {
+    const seen = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      seen.disconnect();
+      setTimeout(hideHint, 6000);
+    }, { threshold: 0.5 });
+    seen.observe(stage);
+  } else setTimeout(hideHint, 6000);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(1);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -596,6 +619,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
   const ndc = new THREE.Vector2();
   let hover = null;
   let interacted = false;
+  let meters = 0;
 
   function resize() {
     const w = stage.clientWidth;
@@ -604,6 +628,16 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
     renderer.setSize(Math.max(1, Math.round(w / PIXEL)), Math.max(1, Math.round(h / PIXEL)), false);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    drawRuler();
+    syncWireButton();
+  }
+
+  // a label every 1, 2, 4, 5 or 10 meters, whatever leaves each label room to breathe at this width
+  function drawRuler() {
+    if (!meters) return;
+    const perMeter = (ruler.clientWidth - 110) / meters;
+    const step = [1, 2, 4, 5, 10].find((s) => perMeter * s >= 36) ?? 10;
+    ruler.innerHTML = `<span class="sc-ticks">${Array.from({ length: meters + 1 }, (_, i) => (i % step === 0 ? `<i class="n" style="left:${(i / meters) * 100}%">${i}</i>` : `<i style="left:${(i / meters) * 100}%"></i>`)).join('')}</span><em>METERS</em>`;
   }
   new ResizeObserver(resize).observe(stage);
 
@@ -691,7 +725,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
         marker.position.set(v[0] * r, 0.9, v[1] * r);
         ctx.flickers.push({ bob: marker, phase: Math.random() * 6 });
         solid.add(marker);
-        ctx.clickable(marker, `Go ${dir}${e.to ? ` to ${e.to}` : ''}`, dir);
+        ctx.clickable(marker, goLabel(dir, e.to), dir);
       }
     } else {
       // floor and ceiling
@@ -786,7 +820,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
           const target = new THREE.Mesh(new THREE.PlaneGeometry(h.w, h.h), new THREE.MeshBasicMaterial({ visible: false }));
           target.position.set(h.x, h.y + h.h / 2, -0.02);
           g.add(target);
-          ctx.clickable(target, h.e.label ?? `Go ${h.dir}${h.e.to ? ` to ${h.e.to}` : ''}`, h.e.cmd ?? h.dir);
+          ctx.clickable(target, h.e.label ?? goLabel(h.dir, h.e.to), h.e.cmd ?? h.dir);
           solid.add(g);
         }
       }
@@ -796,7 +830,7 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
         const e = sceneExits[dir];
         if (!e || e.type === 'none') continue;
         const t = e.type;
-        const label = e.label ?? `Go ${dir}${e.to ? ` to ${e.to}` : ''}`;
+        const label = e.label ?? goLabel(dir, e.to);
         if (t === 'stairs') {
           const st = PROP.stairs(ctx, { steps: 10, material: e.material });
           const wall = e.wall ?? 'east';
@@ -882,30 +916,36 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
     pitch = 0;
 
     // HUD
-    const idx = rooms.findIndex((r) => r.id === info?.id);
-    root.querySelector('.sc-cap b').textContent = `ZORK I / ROOM ${String(idx >= 0 ? idx + 1 : 0).padStart(3, '0')} / ${built ? 'LIVE BUILD' : 'WIREFRAME'}`;
+    const place = places.indexOf(info?.slug);
+    root.querySelector('.sc-cap b').textContent = `ZORK I / ${place >= 0 ? `ROOM ${place + 1} OF ${places.length} / ` : ''}${built ? 'REMASTERED' : 'WIREFRAME'}`;
     root.querySelector('.sc-cap span').textContent = info?.name ?? '';
-    const state = root.querySelector('.sc-state');
-    state.textContent = built ? 'REMASTERED' : 'NOT REMASTERED YET';
-    state.className = `sc-state ${built ? 'on' : 'off'}`;
-    root.querySelector('.sc-count').textContent = rooms.length ? `ROOMS: ${remasteredCount()}/${rooms.length} REMASTERED` : '';
+    root.querySelector('.sc-count').textContent = places.length ? `ROOMS: ${places.filter((s) => remastered.has(s)).length}/${places.length} REMASTERED` : '';
     root.querySelector('.sc-wire').disabled = !built;
-    const ticks = Math.max(4, Math.round(W));
-    root.querySelector('.sc-ruler').innerHTML = `<span class="sc-ticks">${Array.from({ length: ticks + 1 }, (_, i) => `<i style="left:${(i / ticks) * 100}%">${i % (ticks > 12 ? 2 : 1) === 0 ? i : ''}</i>`).join('')}</span><em>METERS</em>`;
+    meters = Math.max(4, Math.round(W));
+    drawRuler();
     room = { built };
     syncWireButton();
   }
 
-  function remasteredCount() {
-    return rooms.filter((r) => remastered.has(r.slug)).length;
-  }
-
   function syncWireButton() {
     const b = root.querySelector('.sc-wire');
-    b.textContent = `WIREFRAME: ${room?.built ? wireMode.toUpperCase() : 'FULL'}`;
+    const mode = room?.built ? wireMode : 'full';
+    b.textContent = `WIREFRAME: ${mode.toUpperCase()}`;
     root.querySelector('.sc-light').textContent = `LIGHTING: ${lighting ? 'ON' : 'OFF'}`;
-    splitEl.style.display = room?.built && wireMode === 'partial' ? 'block' : 'none';
+    splitEl.style.display = mode === 'partial' ? 'block' : 'none';
     splitEl.style.left = `${split * 100}%`;
+    // the share of the frame that shows the remaster: the hint stays inside it, clear of the seam
+    stage.style.setProperty('--solid', mode === 'partial' ? split : 1);
+    // tags name the halves: REMASTER over the textured part, MAP over the wireframe part
+    const width = stage.clientWidth;
+    const seam = mode === 'partial' ? width * split : mode === 'off' ? width : 0;
+    const tag = (el, on, space) => {
+      el.hidden = !on;
+      if (on) el.style.visibility = el.offsetWidth + 20 <= space ? '' : 'hidden';
+    };
+    tag(tags.remaster, !!room?.built && mode !== 'full', seam);
+    tag(tags.map, !!room?.built && mode !== 'off', width - seam);
+    tag(tags.todo, !!room && !room.built, width);
   }
 
   root.querySelector('.sc-light').addEventListener('click', () => {
@@ -934,15 +974,27 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
     splitEl.addEventListener('pointerup', up);
   });
 
-  // look around by dragging; a click without a drag acts on what is under the cursor
+  // look around by dragging; a click without a drag acts on what is under the cursor.
+  // On touch screens the canvas lets vertical swipes scroll the page (touch-action: pan-y): the browser then
+  // cancels the pointer, and only horizontal drags turn the view.
   let drag = null;
+  const aim = (e) => {
+    const b = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
+    pick(e.clientX - b.left, e.clientY - b.top);
+  };
+  const letGo = () => {
+    hover = null;
+    tip.style.opacity = '0';
+    canvas.style.cursor = '';
+  };
   canvas.addEventListener('pointerdown', (e) => {
     drag = { x: e.clientX, y: e.clientY, yaw, pitch, moved: false };
     canvas.setPointerCapture(e.pointerId);
+    // a tap has no hover before it: find what is under the finger now
+    aim(e);
   });
   canvas.addEventListener('pointermove', (e) => {
-    const b = canvas.getBoundingClientRect();
-    ndc.set(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
     if (drag) {
       const dx = e.clientX - drag.x;
       const dy = e.clientY - drag.y;
@@ -951,25 +1003,26 @@ export function createScene(root, { onCommand = () => {}, rooms = [], remastered
       pitch = Math.max(-0.45, Math.min(0.45, drag.pitch - dy * 0.003));
       if (drag.moved) markInteracted();
     }
-    pick(e.clientX - b.left, e.clientY - b.top);
+    aim(e);
   });
-  canvas.addEventListener('pointerup', () => {
+  canvas.addEventListener('pointerup', (e) => {
     if (drag && !drag.moved && hover) {
       markInteracted();
       onCommand(hover.userData.click.cmd);
     }
     drag = null;
+    if (e.pointerType !== 'mouse') letGo();
   });
-  canvas.addEventListener('pointerleave', () => {
-    hover = null;
-    tip.style.opacity = '0';
-    canvas.style.cursor = '';
+  canvas.addEventListener('pointercancel', () => {
+    drag = null;
+    letGo();
   });
+  canvas.addEventListener('pointerleave', letGo);
 
   function markInteracted() {
     if (interacted) return;
     interacted = true;
-    root.querySelector('.sc-hint').classList.add('gone');
+    hideHint();
   }
 
   function pick(x, y) {

@@ -60,6 +60,7 @@ body.layout-scene #screen {
   text-overflow: ellipsis;
 }
 #screen {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -77,6 +78,7 @@ body.layout-scene #screen {
 #prompt {
   display: flex;
   max-width: 82ch;
+  font-size: 16px;
 }
 #prompt label {
   padding-right: 0.5ch;
@@ -159,7 +161,7 @@ body.layout-scene #screen {
   height: 100%;
   image-rendering: pixelated;
   cursor: grab;
-  touch-action: none;
+  touch-action: pan-y;
 }
 .sc-split {
   position: absolute;
@@ -224,35 +226,60 @@ body.layout-scene #screen {
   background: var(--lime);
   color: var(--ink);
 }
-.sc-state {
+/* REMASTER names the textured part, MAP the wireframe part, NOT REMASTERED YET a place with no scene */
+.sc-tag {
   position: absolute;
   top: 10px;
-  right: 10px;
   padding: 5px 8px;
   pointer-events: none;
+  white-space: nowrap;
 }
-.sc-state.on {
+.sc-tag[hidden] {
+  display: none;
+}
+.sc-tag-remaster {
+  left: 10px;
   background: var(--lime);
   color: var(--ink);
 }
-.sc-state.off {
+.sc-tag-map {
+  right: 10px;
+  background: var(--ink);
+  color: var(--lime);
+  box-shadow: inset 0 0 0 1px var(--lime);
+}
+.sc-tag-todo {
+  left: 10px;
   background: var(--pink);
   color: var(--ink);
 }
+/* bottom center above the ruler, clear of the caption and of the seam (at 72% by default) */
 .sc-hint {
   position: absolute;
   left: 50%;
-  top: 12px;
+  bottom: 10px;
+  max-width: calc(100% - 20px);
   transform: translateX(-50%);
   padding: 5px 9px;
   background: rgba(19, 10, 58, 0.85);
   color: #fff;
   pointer-events: none;
-  transition: opacity 0.4s;
+  transition: opacity 0.6s;
   white-space: nowrap;
 }
 .sc-hint.gone {
   opacity: 0;
+}
+/* narrow frames: no room beside the caption, so the hint sits above it, inside the textured part */
+@media (max-width: 960px) {
+  .sc-hint {
+    left: 10px;
+    bottom: 62px;
+    max-width: calc(var(--solid, 1) * 100% - 20px);
+    transform: none;
+    white-space: normal;
+    line-height: 1.4;
+  }
 }
 .sc-ruler {
   border-top: 1px solid var(--ink);
@@ -261,22 +288,20 @@ body.layout-scene #screen {
   position: relative;
   flex: 1;
   height: 100%;
-  margin-right: 10px;
+  margin-right: 28px;
 }
 .sc-ticks i {
   position: absolute;
   bottom: 0;
-  height: 100%;
+  height: 30%;
   border-left: 1px solid var(--ink);
   padding-left: 3px;
   font-style: normal;
   font-size: 10px;
-  line-height: 30px;
+  line-height: 12px;
 }
-.sc-ticks i:nth-child(odd) {
-  height: 55%;
-  line-height: 14px;
-  top: auto;
+.sc-ticks i.n {
+  height: 62%;
 }
 .sc-ruler em {
   font-style: normal;
@@ -285,9 +310,6 @@ body.layout-scene #screen {
 @media (max-width: 520px) {
   .sc-count,
   .sc-view {
-    display: none;
-  }
-  .sc-hint {
     display: none;
   }
 }

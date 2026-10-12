@@ -9,7 +9,10 @@ import { EXITS, MATERIALS, PROPS, WALLS } from '../player/scene-kit.js';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const vm = new ZMachine(readFileSync(resolve(root, 'dist/zork1.z3')), { seed: 1 });
-const names = new Set(rooms(vm).map((r) => r.name));
+const all = rooms(vm);
+const names = new Set(all.map((r) => r.name));
+// places, not room objects: rooms that share a name (the 15 maze rooms) are one place with one scene
+const places = new Set(all.map((r) => r.slug));
 const dir = resolve(root, 'player/scenes');
 const files = readdirSync(dir).filter((f) => f.endsWith('.json') && f !== 'index.json');
 let bad = 0;
@@ -36,5 +39,5 @@ for (const f of files) {
   }
   if (!bad) console.log(`ok  ${f}`);
 }
-console.log(`${bad ? 'FAIL' : 'PASS'}  ${files.length} scenes, ${names.size} rooms in the game, ${bad} problems`);
+console.log(`${bad ? 'FAIL' : 'PASS'}  ${files.length} scenes, ${places.size} places in the game, ${bad} problems`);
 process.exit(bad ? 1 : 0);
