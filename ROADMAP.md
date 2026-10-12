@@ -7,7 +7,7 @@ Keep the soul of the 1980 game: same world, same puzzles, same voice. Improve ho
 
 Turn a wireframe room into a remastered 3D scene: player/scenes/<slug>.json from the room's own text (see player/scenes/README.md).
 
-- [ ] Room scene: North of House
+- [x] Room scene: North of House
 - [ ] Room scene: Behind House
 - [ ] Room scene: Kitchen
 - [ ] Room scene: South of House

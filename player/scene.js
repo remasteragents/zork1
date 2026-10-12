@@ -392,19 +392,25 @@ const PROP = {
     roof.scale.set(w / 6.2, 1, 1.05);
     roof.position.y = h + 1.15;
     g.add(roof);
-    const door = box(1.1, 2.1, 0.08, mat('wood'), 0, 0, 3.02);
-    g.add(door);
     const board = mat('planks');
-    for (const [y, r] of [[0.8, 0.5], [1.5, -0.45]]) {
-      const b = box(1.5, 0.18, 0.05, board, 0, y, 3.08);
-      b.rotation.z = r;
-      g.add(b);
+    // "door": false draws a side of the house with no door, only boarded windows
+    const hasDoor = p.door !== false;
+    if (hasDoor) {
+      const door = box(1.1, 2.1, 0.08, mat('wood'), 0, 0, 3.02);
+      g.add(door);
+      for (const [y, r] of [[0.8, 0.5], [1.5, -0.45]]) {
+        const b = box(1.5, 0.18, 0.05, board, 0, y, 3.08);
+        b.rotation.z = r;
+        g.add(b);
+      }
+      ctx.clickable(door, p.label ?? 'the boarded front door', p.cmd ?? 'open door');
     }
-    for (const x of [-w / 3, w / 3]) {
-      g.add(box(1.0, 1.1, 0.06, flat(0x1d1a24), x, 1.3, 3.02));
+    for (const x of hasDoor ? [-w / 3, w / 3] : [-w / 3, 0, w / 3]) {
+      const pane = box(1.0, 1.1, 0.06, flat(0x1d1a24), x, 1.3, 3.02);
+      g.add(pane);
       for (const y of [1.45, 1.75]) g.add(box(1.2, 0.14, 0.05, board, x, y, 3.07));
+      if (!hasDoor) ctx.clickable(pane, p.label ?? 'a boarded window', p.cmd ?? 'open window');
     }
-    ctx.clickable(door, p.label ?? 'the boarded front door', p.cmd ?? 'open door');
     return g;
   },
   window(ctx, p) {

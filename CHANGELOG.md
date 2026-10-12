@@ -11,3 +11,4 @@
 ## Room view
 - The player draws the current room in 3D above the terminal. Remastered rooms are scenes in player/scenes; the rest of the world shows as a wireframe from the game's map.
 - First scenes: West of House, Living Room, Cellar.
+- North of House scene: the doorless north wall of the white house with its windows boarded up, and a narrow path winding north through the trees. The house prop gained a "door": false option for sides without a door.
