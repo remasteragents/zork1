@@ -1,0 +1,30 @@
+{
+  "room": "Behind House",
+  "kind": "outdoor",
+  "size": [18, 6, 18],
+  "floor": "grass",
+  "sky": "#5f86d6",
+  "ambient": 0.9,
+  "camera": [6, 1.65, 2.4],
+  "look": [-4, 1.6, -1.2],
+  "path": { "width": 1.6, "length": 13, "angle": 90, "x": 3.2, "z": 0.4 },
+  "exits": {
+    "east": { "type": "path", "label": "a path leading into the forest" },
+    "west": { "type": "none" }
+  },
+  "props": [
+    { "type": "house", "at": [-6.5, 0, 0], "rot": 90, "width": 8, "door": false, "windows": false, "label": "the back of the white house", "cmd": "examine house" },
+    { "type": "window", "at": [-3.44, 1.15, -2.9], "rot": 90, "scale": 0.8, "ajar": true, "label": "a small window, slightly ajar", "cmd": "open window" },
+    { "type": "tree", "at": [9.5, 0, -2.4], "scale": 1.1 },
+    { "type": "tree", "at": [11, 0, 2.6] },
+    { "type": "tree", "at": [13.5, 0, -0.6], "scale": 1.2 },
+    { "type": "tree", "at": [8, 0, -6.5] },
+    { "type": "tree", "at": [7.5, 0, 6.8], "scale": 0.9 },
+    { "type": "tree", "at": [12.5, 0, -5.5] },
+    { "type": "tree", "at": [12, 0, 6] },
+    { "type": "tree", "at": [3.5, 0, -10.5], "scale": 1.1 },
+    { "type": "tree", "at": [2.5, 0, 10.5] },
+    { "type": "tree", "at": [-4, 0, -11.5], "scale": 0.9 },
+    { "type": "tree", "at": [-5, 0, 11] }
+  ]
+}

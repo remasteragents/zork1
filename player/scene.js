@@ -405,7 +405,8 @@ const PROP = {
       }
       ctx.clickable(door, p.label ?? 'the boarded front door', p.cmd ?? 'open door');
     }
-    for (const x of hasDoor ? [-w / 3, w / 3] : [-w / 3, 0, w / 3]) {
+    // "windows": false draws a bare side (behind the house the text names only one small window)
+    for (const x of p.windows === false ? [] : hasDoor ? [-w / 3, w / 3] : [-w / 3, 0, w / 3]) {
       const pane = box(1.0, 1.1, 0.06, flat(0x1d1a24), x, 1.3, 3.02);
       g.add(pane);
       for (const y of [1.45, 1.75]) g.add(box(1.2, 0.14, 0.05, board, x, y, 3.07));
@@ -417,7 +418,12 @@ const PROP = {
     const g = new THREE.Group();
     const frame = flat(0x5a4632);
     g.add(box(1.1, 0.08, 0.1, frame, 0, 0, 0), box(1.1, 0.08, 0.1, frame, 0, 1.0, 0), box(0.08, 1.08, 0.1, frame, -0.55, 0, 0), box(0.08, 1.08, 0.1, frame, 0.55, 0, 0));
-    g.add(box(1.0, 1.0, 0.02, new THREE.MeshLambertMaterial({ color: p.open ? 0x0d0b12 : 0x89b6d8, transparent: !p.open, opacity: 0.5 }), 0, 0.04, 0));
+    const glass = new THREE.MeshLambertMaterial({ color: p.open ? 0x0d0b12 : 0x89b6d8, transparent: !p.open, opacity: 0.5 });
+    if (p.ajar && !p.open) {
+      // "slightly ajar": the sash is pushed up a hand's width, a dark gap below it
+      g.add(box(1.0, 0.14, 0.02, flat(0x0d0b12), 0, 0.04, 0));
+      g.add(box(1.0, 0.86, 0.02, glass, 0, 0.18, 0.03), box(1.04, 0.05, 0.06, frame, 0, 0.16, 0.03));
+    } else g.add(box(1.0, 1.0, 0.02, glass, 0, 0.04, 0));
     return g;
   },
   pillar() {
