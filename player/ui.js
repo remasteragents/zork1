@@ -12,6 +12,8 @@ const SLOT = `remaster:save:${location.pathname.replace(/[^/]*$/, '')}`;
 const history = [];
 let back = 0;
 let vm;
+// inside a frame on someone's page, never grab the keyboard before the player clicks in
+const embedded = window.parent !== window;
 
 function write(text, cls) {
   if (!text) return;
@@ -50,11 +52,11 @@ function restore() {
   }
 }
 
-function afterTurn() {
+function afterTurn(auto = false) {
   if (vm.halted) {
     write('\n[The game is over. Press Enter to play again.]\n');
   }
-  cmd.focus({ preventScroll: true });
+  if (!(auto && embedded)) cmd.focus({ preventScroll: true });
 }
 
 form.addEventListener('submit', (e) => {
@@ -96,7 +98,7 @@ async function boot() {
   const seed = params.has('seed') ? Number(params.get('seed')) : undefined;
   vm = new ZMachine(bytes, { print, status, save, restore, seed, restart: () => (log.textContent = '') });
   vm.run();
-  afterTurn();
+  afterTurn(true);
 }
 
 boot().catch((e) => write(`\n[${e.message}]\n`));
